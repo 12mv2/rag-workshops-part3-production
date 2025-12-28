@@ -14,20 +14,22 @@ pc = Pinecone(api_key=API_KEY)
 index = pc.Index(INDEX_NAME)
 
 # === Embedding helpers ===
-#   --- Ensures equal weighting of runner features
+# Step 1: Feature normalization (0-1 scale) - CRITICAL for equal feature weight
 def normalize_feature(val, min_val, max_val):
+    """Scale feature to 0-1 range so all features contribute equally"""
     return (val - min_val) / (max_val - min_val)
 
-#   --- Reads each runner dict as a vector, Defines magnitude then normalizes
+# Step 2: Vector normalization (unit length) - Best practice for cosine similarity
 def normalize_vector(vec):
-    mag = math.sqrt(sum(v**2 for v in vec)) # <- mag is also the dot prodcut v . v
-    return [v / mag for v in vec] if mag else vec # <- gives a unit vector i.e. mag = 1
+    """Convert to unit vector (magnitude=1) for efficient similarity calculations"""
+    mag = math.sqrt(sum(v**2 for v in vec))
+    return [v / mag for v in vec] if mag else vec
 
-#   --- Transforms each runner dict into a unit vector for pinecone
+# Combine both steps: feature normalization → vector normalization
 def embed_runner(runner):
+    """Transform gait metrics into normalized 3D vector for Pinecone"""
     cadence = normalize_feature(runner["cadence"], 50, 250)
-    #heel = normalize_feature(runner["heel_strike"] * 90, 0, 90)
-    heel = runner["heel_strike"] # already normalized: min_val=0, max_val=1
+    heel = runner["heel_strike"]  # Already 0-1 scale
     vert = normalize_feature(runner["vertical_oscillation"], 6, 20)
     return normalize_vector([cadence, heel, vert])
 
@@ -40,7 +42,7 @@ vectors = []
 for r in runners:
     vec = embed_runner(r)
     vectors.append((r["name"], vec))
-    print(f"Prepared: {r['name']} → {['%.3f' % x for x in vec]}")
+    print(f"✓ {r['name']:20s} → [{vec[0]:.3f}, {vec[1]:.3f}, {vec[2]:.3f}]")
 
 # === Upload the vectors to Pinecone ===
 index.upsert(vectors=vectors)
